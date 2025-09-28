@@ -1,0 +1,198 @@
+----------------------Database Setup (MySQL)----------------------------------
+CREATE DATABASE product_db;
+
+USE product_db;
+
+CREATE TABLE Product (
+    ProductID INT PRIMARY KEY,
+    ProductName VARCHAR(50),
+    Price FLOAT,
+    Quantity INT
+);
+
+---------------------------- Product.java (Model)--------------------------
+public class Product {
+    private int productId;
+    private String productName;
+    private float price;
+    private int quantity;
+
+    public Product(int productId, String productName, float price, int quantity) {
+        this.productId = productId;
+        this.productName = productName;
+        this.price = price;
+        this.quantity = quantity;
+    }
+
+    public int getProductId() { return productId; }
+    public void setProductId(int productId) { this.productId = productId; }
+
+    public String getProductName() { return productName; }
+    public void setProductName(String productName) { this.productName = productName; }
+
+    public float getPrice() { return price; }
+    public void setPrice(float price) { this.price = price; }
+
+    public int getQuantity() { return quantity; }
+    public void setQuantity(int quantity) { this.quantity = quantity; }
+
+    @Override
+    public String toString() {
+        return productId + "\t" + productName + "\t" + price + "\t" + quantity;
+    }
+}
+
+-------------------------------- ProductController.java (Controller with JDBC & Transactions)------------------------------
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ProductController {
+    private Connection conn;
+
+    public ProductController() {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            conn = DriverManager.getConnection(
+                "jdbc:mysql://localhost:3306/product_db", "root", "your_password"
+            );
+            conn.setAutoCommit(false); // Enable transaction management
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void addProduct(Product p) {
+        String sql = "INSERT INTO Product(ProductID, ProductName, Price, Quantity) VALUES(?,?,?,?)";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, p.getProductId());
+            ps.setString(2, p.getProductName());
+            ps.setFloat(3, p.getPrice());
+            ps.setInt(4, p.getQuantity());
+            ps.executeUpdate();
+            conn.commit();
+            System.out.println("Product added successfully.");
+        } catch (SQLException e) {
+            try { conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
+            e.printStackTrace();
+        }
+    }
+
+    public List<Product> getAllProducts() {
+        List<Product> list = new ArrayList<>();
+        String sql = "SELECT * FROM Product";
+        try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                list.add(new Product(
+                    rs.getInt("ProductID"),
+                    rs.getString("ProductName"),
+                    rs.getFloat("Price"),
+                    rs.getInt("Quantity")
+                ));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    public void updateProduct(Product p) {
+        String sql = "UPDATE Product SET ProductName=?, Price=?, Quantity=? WHERE ProductID=?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, p.getProductName());
+            ps.setFloat(2, p.getPrice());
+            ps.setInt(3, p.getQuantity());
+            ps.setInt(4, p.getProductId());
+            int rows = ps.executeUpdate();
+            if (rows > 0) {
+                conn.commit();
+                System.out.println("Product updated successfully.");
+            } else {
+                System.out.println("Product not found.");
+                conn.rollback();
+            }
+        } catch (SQLException e) {
+            try { conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
+            e.printStackTrace();
+        }
+    }
+
+    public void deleteProduct(int productId) {
+        String sql = "DELETE FROM Product WHERE ProductID=?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, productId);
+            int rows = ps.executeUpdate();
+            if (rows > 0) {
+                conn.commit();
+                System.out.println("Product deleted successfully.");
+            } else {
+                System.out.println("Product not found.");
+                conn.rollback();
+            }
+        } catch (SQLException e) {
+            try { conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
+            e.printStackTrace();
+        }
+    }
+}
+
+------------------------------------ ProductView.java (View & Menu)---------------------------------------
+import java.util.List;
+import java.util.Scanner;
+
+public class ProductView {
+    private static Scanner sc = new Scanner(System.in);
+    private static ProductController controller = new ProductController();
+
+    public static void main(String[] args) {
+        int choice;
+        do {
+            System.out.println("\n--- Product Management ---");
+            System.out.println("1. Add Product");
+            System.out.println("2. View All Products");
+            System.out.println("3. Update Product");
+            System.out.println("4. Delete Product");
+            System.out.println("5. Exit");
+            System.out.print("Enter your choice: ");
+            choice = sc.nextInt();
+
+            switch (choice) {
+                case 1: addProduct(); break;
+                case 2: viewProducts(); break;
+                case 3: updateProduct(); break;
+                case 4: deleteProduct(); break;
+                case 5: System.out.println("Exiting..."); break;
+                default: System.out.println("Invalid choice!");
+            }
+        } while (choice != 5);
+    }
+
+    private static void addProduct() {
+        System.out.print("Enter Product ID: "); int id = sc.nextInt();
+        sc.nextLine();
+        System.out.print("Enter Product Name: "); String name = sc.nextLine();
+        System.out.print("Enter Price: "); float price = sc.nextFloat();
+        System.out.print("Enter Quantity: "); int qty = sc.nextInt();
+        controller.addProduct(new Product(id, name, price, qty));
+    }
+
+    private static void viewProducts() {
+        List<Product> products = controller.getAllProducts();
+        System.out.println("ID\tName\tPrice\tQuantity");
+        for (Product p : products) System.out.println(p);
+    }
+
+    private static void updateProduct() {
+        System.out.print("Enter Product ID to update: "); int id = sc.nextInt();
+        sc.nextLine();
+        System.out.print("Enter New Name: "); String name = sc.nextLine();
+        System.out.print("Enter New Price: "); float price = sc.nextFloat();
+        System.out.print("Enter New Quantity: "); int qty = sc.nextInt();
+        controller.updateProduct(new Product(id, name, price, qty));
+    }
+
+    private static void deleteProduct() {
+        System.out.print("Enter Product ID to delete: "); int id = sc.nextInt();
+        controller.deleteProduct(id);
+    }
+}
